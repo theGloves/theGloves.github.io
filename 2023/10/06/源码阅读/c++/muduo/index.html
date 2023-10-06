@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.0.0-rc2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"thegloves.github.io","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"always","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="muduo 类图">
+<meta property="og:type" content="article">
+<meta property="og:title" content="muduo">
+<meta property="og:url" content="https://thegloves.github.io/2023/10/06/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/c++/muduo/index.html">
+<meta property="og:site_name" content="Eureka">
+<meta property="og:description" content="muduo 类图">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2023-10-06T11:17:10.000Z">
+<meta property="article:modified_time" content="2023-10-06T11:48:35.590Z">
+<meta property="article:author" content="theGloves">
+<meta property="article:tag" content="source">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://thegloves.github.io/2023/10/06/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/c++/muduo/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>muduo | Eureka</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Eureka</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">11</span></a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">7</span></a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>日程表</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://thegloves.github.io/2023/10/06/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/c++/muduo/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://avatars.githubusercontent.com/u/20971570?s=400&u=b3d42c25f45664cc98985e0232b36f130c1ca3bb&v=4">
+      <meta itemprop="name" content="theGloves">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Eureka">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          muduo
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2023-10-06 19:17:10 / 修改时间：19:48:35" itemprop="dateCreated datePublished" datetime="2023-10-06T19:17:10+08:00">2023-10-06</time>
+            </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/c/" itemprop="url" rel="index"><span itemprop="name">c++</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>muduo 类图</p>
+<span id="more"></span>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br></pre></td><td class="code"><pre><span class="line">@startuml</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">class Channel &#123;</span><br><span class="line">    int fd_</span><br><span class="line">    EventLoop* loop</span><br><span class="line">    ReadEventCallback readCallback_;</span><br><span class="line">    EventCallback writeCallback_;</span><br><span class="line">    EventCallback closeCallback_;</span><br><span class="line">    EventCallback errorCallback_;</span><br><span class="line"></span><br><span class="line">    void handleEvent(Timestamp receiveTime)</span><br><span class="line">    void tie(const std::shared_ptr&lt;void&gt;&amp;)</span><br><span class="line">&#125;</span><br><span class="line">note left of Channel: channel负责管理fd感兴趣的事件</span><br><span class="line"></span><br><span class="line">class EventLoop &#123;</span><br><span class="line">  std::unique_ptr&lt;Poller&gt; poller_;</span><br><span class="line">  std::unique_ptr&lt;TimerQueue&gt; timerQueue_;</span><br><span class="line">  ChannelList activeChannels_;</span><br><span class="line">  Channel* currentActiveChannel_;</span><br><span class="line"></span><br><span class="line">  void loop();</span><br><span class="line">  void runInLoop(Functor cb);</span><br><span class="line">  void queueInLoop(Functor cb);</span><br><span class="line">  TimerId runAt(Timestamp time, TimerCallback cb);</span><br><span class="line">  TimerId runAfter(double delay, TimerCallback cb);</span><br><span class="line">  TimerId runEvery(double interval, TimerCallback cb);</span><br><span class="line">  void cancel(TimerId timerId);</span><br><span class="line">&#125;</span><br><span class="line">note left of EventLoop: EventLoop提供单线程事件驱动机制，reactor</span><br><span class="line"></span><br><span class="line">class EventLoopThread&#123;</span><br><span class="line">    EventLoop* loop_</span><br><span class="line">    Thread thread_</span><br><span class="line"></span><br><span class="line">    EventLoop* startLoop()</span><br><span class="line">&#125;</span><br><span class="line">note right of EventLoopThread: EventLoop的工作线程。</span><br><span class="line"></span><br><span class="line">class EventLoopThreadPool &#123;</span><br><span class="line">    EventLoop* baseLoop_;</span><br><span class="line">    std::vector&lt;std::unique_ptr&lt;EventLoopThread&gt;&gt; threads_;</span><br><span class="line">    std::vector&lt;EventLoop*&gt; loops_;</span><br><span class="line"></span><br><span class="line">    void start(const ThreadInitCallback&amp; cb)</span><br><span class="line">    EventLoop* getNextLoop()</span><br><span class="line">&#125;</span><br><span class="line">note left of EventLoopThreadPool: 线程池，每个线程有独立的eventLoop</span><br><span class="line"></span><br><span class="line">interface Poller &#123;</span><br><span class="line">    std::map&lt;int, Channel*&gt; channels_;</span><br><span class="line">    EventLoop* ownerLoop_;</span><br><span class="line"></span><br><span class="line">    Timestamp poll(int timeoutMs, std::vector&lt;Channel*&gt;* activeChannels) = 0;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">class EpollPoller &#123;</span><br><span class="line">    std::vector&lt;struct epoll_event&gt; events_</span><br><span class="line">    int epollfd_</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">class PollPoller &#123;</span><br><span class="line">    vector&lt;struct pollfd&gt; pollfds_</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">class Acceptor &#123;</span><br><span class="line">    EventLoop* loop_</span><br><span class="line">    Socket acceptSocket_</span><br><span class="line">    Channel acceptChannel_</span><br><span class="line">    NewConnectionCallback newConnectionCallback_</span><br><span class="line"></span><br><span class="line">    void listen()</span><br><span class="line">&#125;</span><br><span class="line">note left of Acceptor: Acceptor负责监听端口 &amp; 建立链接</span><br><span class="line"></span><br><span class="line">class TcpConnection &#123;</span><br><span class="line">  EventLoop* loop_;</span><br><span class="line">  std::unique_ptr&lt;Socket&gt; socket_</span><br><span class="line">  std::unique_ptr&lt;Channel&gt; channel_</span><br><span class="line">  size_t highWaterMark_;</span><br><span class="line">  Buffer inputBuffer_</span><br><span class="line">  Buffer outputBuffer_ </span><br><span class="line"></span><br><span class="line">  void send(Buffer* message)</span><br><span class="line">  void shutdown()</span><br><span class="line">  void forceClose()</span><br><span class="line">  void forceCloseWithDelay(double seconds)</span><br><span class="line">  void startRead()</span><br><span class="line">  void stopRead()</span><br><span class="line">  void connectEstablished()</span><br><span class="line">  void connectDestroyed()</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">class TcpServer &#123;</span><br><span class="line">    EventLoop* loop_</span><br><span class="line">    std::unique_ptr&lt;Acceptor&gt; acceptor_</span><br><span class="line">    std::shared_ptr&lt;EventLoopThreadPool&gt; threadPool_</span><br><span class="line">    std::map&lt;string, TcpConnectionPtr&gt; connections_</span><br><span class="line"></span><br><span class="line">    void start()</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">class TcpClient &#123;</span><br><span class="line">    EventLoop* loop_</span><br><span class="line">    ConnectorPtr connector_</span><br><span class="line">    TcpConnectionPtr connection_</span><br><span class="line"></span><br><span class="line">    void connect()</span><br><span class="line">    void disconnect()</span><br><span class="line">    void stop()</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">class Connector &#123;</span><br><span class="line">    EventLoop* loop_;</span><br><span class="line">    std::unique_ptr&lt;Channel&gt; channel_;</span><br><span class="line"></span><br><span class="line">    void start()</span><br><span class="line">    void restart() </span><br><span class="line">    void stop()</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">Poller &lt;|.. EpollPoller</span><br><span class="line">Poller &lt;|.. PollPoller</span><br><span class="line"></span><br><span class="line">EventLoop &quot;1&quot; o--&gt; &quot;n&quot; Channel</span><br><span class="line">EventLoop &quot;1&quot; *--&gt; &quot;1&quot; Poller</span><br><span class="line">EventLoopThread &quot;1&quot; *--&gt; &quot;1&quot; EventLoop</span><br><span class="line">EventLoopThreadPool &quot;1&quot; *--&gt; &quot;n&quot; EventLoopThread</span><br><span class="line">TcpConnection &quot;1&quot; *--&gt; &quot;1&quot; Socket</span><br><span class="line">TcpConnection &quot;1&quot; *--&gt; &quot;1&quot; Channel</span><br><span class="line">TcpServer &quot;1&quot; *--&gt; &quot;1&quot; Acceptor</span><br><span class="line">TcpServer &quot;1&quot; *--&gt; &quot;1&quot; EventLoopThreadPool</span><br><span class="line">TcpServer &quot;1&quot; *--&gt; &quot;n&quot; TcpConnection</span><br><span class="line">Connector &quot;1&quot; *--&gt; &quot;1&quot; Channel</span><br><span class="line">TcpClient &quot;1&quot; *--&gt; &quot;1&quot; Connector</span><br><span class="line">TcpClient &quot;1&quot; *--&gt; &quot;1&quot; TcpConnection</span><br><span class="line">@enduml</span><br></pre></td></tr></table></figure>
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/source/" rel="tag"># source</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2023/10/03/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/kafka/client/" rel="prev" title="client">
+      <i class="fa fa-chevron-left"></i> client
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="theGloves"
+      src="https://avatars.githubusercontent.com/u/20971570?s=400&u=b3d42c25f45664cc98985e0232b36f130c1ca3bb&v=4">
+  <p class="site-author-name" itemprop="name">theGloves</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+        <span class="site-state-item-count">6</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="mailto:yusfko@hotmail.com" title="E-Mail → mailto:yusfko@hotmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">theGloves</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://mist.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Mist</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

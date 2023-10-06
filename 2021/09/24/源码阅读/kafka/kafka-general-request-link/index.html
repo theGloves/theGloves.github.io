@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.0.0-rc2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"thegloves.github.io","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"always","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="（这是笔者在美团实习时做的一次源码分享，当时直接将本文当作slide，所以很多地方写得比较简略） 本文以Kafka 0.10.0为例，追踪broker端通用请求处理链路。本文侧重一个请求在Kafka的组件中如何流转，不会涉及太多网络层（Java NIO）和请求具体的处理实现。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="kafka通用请求链路">
+<meta property="og:url" content="https://thegloves.github.io/2021/09/24/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/kafka/kafka-general-request-link/index.html">
+<meta property="og:site_name" content="Eureka">
+<meta property="og:description" content="（这是笔者在美团实习时做的一次源码分享，当时直接将本文当作slide，所以很多地方写得比较简略） 本文以Kafka 0.10.0为例，追踪broker端通用请求处理链路。本文侧重一个请求在Kafka的组件中如何流转，不会涉及太多网络层（Java NIO）和请求具体的处理实现。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2021-09-24T08:28:04.000Z">
+<meta property="article:modified_time" content="2023-10-06T11:48:35.592Z">
+<meta property="article:author" content="theGloves">
+<meta property="article:tag" content="kafka">
+<meta property="article:tag" content="source">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://thegloves.github.io/2021/09/24/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/kafka/kafka-general-request-link/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>kafka通用请求链路 | Eureka</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Eureka</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">11</span></a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">7</span></a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>日程表</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://thegloves.github.io/2021/09/24/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/kafka/kafka-general-request-link/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://avatars.githubusercontent.com/u/20971570?s=400&u=b3d42c25f45664cc98985e0232b36f130c1ca3bb&v=4">
+      <meta itemprop="name" content="theGloves">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Eureka">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          kafka通用请求链路
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-09-24 16:28:04" itemprop="dateCreated datePublished" datetime="2021-09-24T16:28:04+08:00">2021-09-24</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-10-06 19:48:35" itemprop="dateModified" datetime="2023-10-06T19:48:35+08:00">2023-10-06</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/kafka/" itemprop="url" rel="index"><span itemprop="name">kafka</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>（这是笔者在美团实习时做的一次源码分享，当时直接将本文当作slide，所以很多地方写得比较简略）<br />
+本文以Kafka 0.10.0为例，追踪broker端通用请求处理链路。本文侧重一个请求在Kafka的组件中如何流转，不会涉及太多网络层（Java NIO）和请求具体的处理实现。</p>
+<span id="more"></span>
+<h2 id="总体流程"><a class="markdownIt-Anchor" href="#总体流程"></a> 总体流程</h2>
+<p>TODO 流程图，时序</p>
+<p>一个请求完整的请求链路：</p>
+<ol>
+<li>客户端请求建立连接</li>
+<li>acceptor监听到连接事件，客户端的新连接到来</li>
+<li>acceptor将新连接分配给某个processor，连接建立成功，processor等待收到客户端的请求就绪</li>
+<li>客户端发送请求，processor监听到请求就绪事件</li>
+<li>解析请求，转换成内部的request数据，加入到requestQueue中</li>
+<li>handler从request queue中poll到请求</li>
+<li>将请求转移给KafkaAPIs组件处理</li>
+<li>handler或者延时组件生成对应的response，写到请求所在processor的response queue中</li>
+<li>processor每次poll从自己的response queue取出response</li>
+<li>processor将response写入对应的Socket Channel</li>
+<li>网络线程将response返回给客户端</li>
+</ol>
+<h2 id="关键组件"><a class="markdownIt-Anchor" href="#关键组件"></a> 关键组件</h2>
+<p>通过KafkaServer的启动流程，了解到和通用请求处理相关的组件有三个：</p>
+<ol>
+<li>SocketServer：负责连接的建立、接受request和发送response
+<ul>
+<li>RequestChannel：这个组件比较特殊，它是连接Socket和Apis的逻辑channel，由SocketServer负责管理</li>
+</ul>
+</li>
+<li>KafkaApis：统一的请求处理入口，将请求转交给对应的组件处理。同时Apis也要负责控制请求的频率</li>
+<li>KafkaRequestHandlerPool：存放requestHandler的pool</li>
+</ol>
+<p>TODO 逻辑视图</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br></pre></td><td class="code"><pre><span class="line">class KafkaServer(val config: KafkaConfig, time: Time = SystemTime, threadNamePrefix: Option[String] = None) extends Logging with KafkaMetricsGroup &#123;</span><br><span class="line">  /**</span><br><span class="line">   * Start up API for bringing up a single instance of the Kafka server.</span><br><span class="line">   * Instantiates the LogManager, the SocketServer and the request handlers - KafkaRequestHandlers</span><br><span class="line">   */</span><br><span class="line">  def startup() &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">      info(&quot;starting&quot;)</span><br><span class="line"></span><br><span class="line">      if(isShuttingDown.get)</span><br><span class="line">        throw new IllegalStateException(&quot;Kafka server is still shutting down, cannot re-start!&quot;)</span><br><span class="line"></span><br><span class="line">      if(startupComplete.get)</span><br><span class="line">        return</span><br><span class="line"></span><br><span class="line">      val canStartup = isStartingUp.compareAndSet(false, true)</span><br><span class="line">      if (canStartup) &#123;</span><br><span class="line">        metrics = new Metrics(metricConfig, reporters, kafkaMetricsTime, true)</span><br><span class="line"></span><br><span class="line">        brokerState.newState(Starting)</span><br><span class="line"></span><br><span class="line">        /* start scheduler */</span><br><span class="line">        kafkaScheduler.startup()</span><br><span class="line"></span><br><span class="line">        /* setup zookeeper */</span><br><span class="line">        zkUtils = initZk()</span><br><span class="line"></span><br><span class="line">        /* start log manager */</span><br><span class="line">        logManager = createLogManager(zkUtils.zkClient, brokerState)</span><br><span class="line">        logManager.startup()</span><br><span class="line"></span><br><span class="line">        /* generate brokerId */</span><br><span class="line">        config.brokerId =  getBrokerId</span><br><span class="line">        this.logIdent = &quot;[Kafka Server &quot; + config.brokerId + &quot;], &quot;</span><br><span class="line"></span><br><span class="line">        // 1. 初始化好acceptor线程和processor线程，注册好监听事件</span><br><span class="line">        socketServer = new SocketServer(config, metrics, kafkaMetricsTime)</span><br><span class="line">        socketServer.startup()</span><br><span class="line">        // 到这里，broker其实已经能够接受连接和请求了，只是请求还没法处理</span><br><span class="line"></span><br><span class="line">        // ... replica、controller、group coordinator、authorizer等组件的初始化和启动</span><br><span class="line">        </span><br><span class="line">        /* start processing requests */</span><br><span class="line">        apis = new KafkaApis(socketServer.requestChannel, replicaManager, groupCoordinator,</span><br><span class="line">          kafkaController, zkUtils, config.brokerId, config, metadataCache, metrics, authorizer)</span><br><span class="line">        // 初始化好requestHandler线程，完成后broker可以开始正常工作</span><br><span class="line">        requestHandlerPool = new KafkaRequestHandlerPool(config.brokerId, socketServer.requestChannel, apis, config.numIoThreads)</span><br><span class="line">        brokerState.newState(RunningAsBroker)</span><br><span class="line">        // ...</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    catch &#123;</span><br><span class="line">      case e: Throwable =&gt;</span><br><span class="line">        fatal(&quot;Fatal error during KafkaServer startup. Prepare to shutdown&quot;, e)</span><br><span class="line">        isStartingUp.set(false)</span><br><span class="line">        shutdown()</span><br><span class="line">        throw e</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>kafka启动时，会先初始化好socket server，然后再去初始化接口KafkaApis和handler线程。下面我们依次深入三个关键组件的初始化和启动</p>
+<h3 id="socketserver"><a class="markdownIt-Anchor" href="#socketserver"></a> SocketServer</h3>
+<p>SocketServer负责网络相关的事件：连接的管理、request和response的收发。SocketServer的核心是network NIO，简单来说，就是用户以异步的方式来等待网络数据准备好，不会因为等待某个请求，使得整个线程阻塞住。从使用上来看，线程每隔一段时间就去网络层那里查看有没有传输完的请求，如果有就处理，没有就随用户操作。</p>
+<h4 id="初始化"><a class="markdownIt-Anchor" href="#初始化"></a> 初始化</h4>
+<p>SocketServer的初始化主要是根据配置，为acceptor线程和processor线程的array预留好空间，同时初始化好RequestChannel</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line">class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time) extends Logging with KafkaMetricsGroup &#123;</span><br><span class="line"></span><br><span class="line">  private val endpoints = config.listeners // &quot;listeners&quot; broker监听的端口列表</span><br><span class="line">  private val numProcessorThreads = config.numNetworkThreads // &quot;num.network.threads&quot; 配置里设置的网络线程数N</span><br><span class="line">  private val maxQueuedRequests = config.queuedMaxRequests // &quot;queued.max.requests&quot; 请求队列的长度</span><br><span class="line">  private val totalProcessorThreads = numProcessorThreads * endpoints.size // 总共的网络线程数，一个endpoint会有N个网络线程</span><br><span class="line"></span><br><span class="line">  private val maxConnectionsPerIp = config.maxConnectionsPerIp // &quot;max.connections.per.ip&quot; 每个ip最大的连接数</span><br><span class="line">  private val maxConnectionsPerIpOverrides = config.maxConnectionsPerIpOverrides // &quot;max.connections.per.ip.overrides&quot; ？</span><br><span class="line"></span><br><span class="line">  this.logIdent = &quot;[Socket Server on Broker &quot; + config.brokerId + &quot;], &quot;</span><br><span class="line"></span><br><span class="line">  val requestChannel = new RequestChannel(totalProcessorThreads, maxQueuedRequests) // 连接SocketServer和KafkaAPi的逻辑channel，存放两种关键队列：requestQueue、responseQueue</span><br><span class="line">  private val processors = new Array[Processor](totalProcessorThreads) // 所有的网络线程组成一个Array，每N个网络线程属于同一个endpoint</span><br><span class="line"></span><br><span class="line">  private[network] val acceptors = mutable.Map[EndPoint, Acceptor]() // acceptor线程</span><br><span class="line">  private var connectionQuotas: ConnectionQuotas = _ // 》</span><br><span class="line"></span><br><span class="line">  private val allMetricNames = (0 until totalProcessorThreads).map &#123; i =&gt;</span><br><span class="line">    val tags = new util.HashMap[String, String]()</span><br><span class="line">    tags.put(&quot;networkProcessor&quot;, i.toString)</span><br><span class="line">    metrics.metricName(&quot;io-wait-ratio&quot;, &quot;socket-server-metrics&quot;, tags)</span><br><span class="line">  &#125; // 每个processor的io-ratio统计指标</span><br><span class="line"></span><br><span class="line">  // register the processor threads for notification of responses</span><br><span class="line">  requestChannel.addResponseListener(id =&gt; processors(id).wakeup())</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">SocketServer负责RequstChannel的初始化 - 主要是两种队列的初始化：requestQueue和responseQueue</span><br><span class="line"></span><br><span class="line">class RequestChannel(val numProcessors: Int, val queueSize: Int) extends KafkaMetricsGroup &#123;</span><br><span class="line">  // 主要是两种队列的初始化，需要注意的是</span><br><span class="line">  // 所有线程共用一个requestQueue</span><br><span class="line">  // 每个processor线程各自拥有ResponseQueue</span><br><span class="line">  private var responseListeners: List[(Int) =&gt; Unit] = Nil</span><br><span class="line">  private val requestQueue = new ArrayBlockingQueue[RequestChannel.Request](queueSize)</span><br><span class="line">  private val responseQueues = new Array[BlockingQueue[RequestChannel.Response]](numProcessors)</span><br><span class="line">  for(i &lt;- 0 until numProcessors)</span><br><span class="line">    responseQueues(i) = new LinkedBlockingQueue[RequestChannel.Response]()</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h4 id="启动"><a class="markdownIt-Anchor" href="#启动"></a> 启动</h4>
+<p>用户可以给Kafka配置多个监听地址endpoint，SocketServer启动时会为每个endpoint启动一个acceptor线程，然后每一个acceptor线程配N个processor线程。当acceptor线程启动成功后，SocketServer的启动也随之完成。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><span class="line">class SocketServer(val config: KafkaConfig, val metrics: Metrics, val time: Time) extends Logging with KafkaMetricsGroup &#123;</span><br><span class="line">  def startup() &#123;</span><br><span class="line">    this.synchronized &#123;</span><br><span class="line">      connectionQuotas = new ConnectionQuotas(maxConnectionsPerIp, maxConnectionsPerIpOverrides) // 连接数计数</span><br><span class="line"></span><br><span class="line">      val sendBufferSize = config.socketSendBufferBytes // &quot;socket.send.buffer.bytes&quot; 发送缓存区大小</span><br><span class="line">      val recvBufferSize = config.socketReceiveBufferBytes // &quot;socket.receive.buffer.bytes&quot; 接受缓存区大小</span><br><span class="line">      val brokerId = config.brokerId // &quot;broker.id&quot;</span><br><span class="line"></span><br><span class="line">      var processorBeginIndex = 0</span><br><span class="line">      // 一个endpoint对应一个acceptor，一个acceptor对应N个processor</span><br><span class="line">      endpoints.values.foreach &#123; endpoint =&gt;</span><br><span class="line">        val protocol = endpoint.protocolType</span><br><span class="line">        val processorEndIndex = processorBeginIndex + numProcessorThreads</span><br><span class="line"></span><br><span class="line">        for (i &lt;- processorBeginIndex until processorEndIndex) &#123;</span><br><span class="line">          // 初始化Processor线程，主要是初始化Selector</span><br><span class="line">          processors(i) = newProcessor(i, connectionQuotas, protocol)</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        // 在这里启动的processor线程</span><br><span class="line">        // 初始化acceptor线程，同时启动绑定的processor线程</span><br><span class="line">        val acceptor = new Acceptor(endpoint, sendBufferSize, recvBufferSize, brokerId,</span><br><span class="line">          processors.slice(processorBeginIndex, processorEndIndex), connectionQuotas)</span><br><span class="line">        acceptors.put(endpoint, acceptor)</span><br><span class="line">        </span><br><span class="line">        // 这里为什么不用daemon方式启动线程？</span><br><span class="line">        Utils.newThread(&quot;kafka-socket-acceptor-%s-%d&quot;.format(protocol.toString, endpoint.port), acceptor, false).start()</span><br><span class="line">        acceptor.awaitStartup() // 在这里等待acceptor启动成功后才恢复执行（acceptor注册OP_ACCEPT事件成功）</span><br><span class="line">        processorBeginIndex = processorEndIndex</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    newGauge(&quot;NetworkProcessorAvgIdlePercent&quot;,</span><br><span class="line">      new Gauge[Double] &#123;</span><br><span class="line">        def value = allMetricNames.map( metricName =&gt;</span><br><span class="line">          metrics.metrics().get(metricName).value()).sum / totalProcessorThreads</span><br><span class="line">      &#125;</span><br><span class="line">    )</span><br><span class="line"></span><br><span class="line">    info(&quot;Started &quot; + acceptors.size + &quot; acceptor threads&quot;)</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="kafkaapis"><a class="markdownIt-Anchor" href="#kafkaapis"></a> KafkaApis</h3>
+<p>不展开看了，主要是配额器quotaManager的初始化。KafkaApis的主要功能就是将request dispatch到相应的组件上</p>
+<h3 id="kafkarequesthandlerpool"><a class="markdownIt-Anchor" href="#kafkarequesthandlerpool"></a> KafkaRequestHandlerPool</h3>
+<p>在初始化KafkaRequestHandlerPool时，SocketServer已经启动好了，说明所有的acceptor和processor已经就绪，broker已经能够接受请求了，所以KafkaRequestHandlerPool的初始化主要完成KafkaRequestHandler线程的启动，启动成功后就可以开始处理请求。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line">class KafkaRequestHandlerPool(val brokerId: Int,</span><br><span class="line">                              val requestChannel: RequestChannel,</span><br><span class="line">                              val apis: KafkaApis,</span><br><span class="line">                              numThreads: Int) extends Logging with KafkaMetricsGroup &#123;</span><br><span class="line"></span><br><span class="line">  /* a meter to track the average free capacity of the request handlers */</span><br><span class="line">  // handler的idle percent指标是聚合后的结果</span><br><span class="line">  private val aggregateIdleMeter = newMeter(&quot;RequestHandlerAvgIdlePercent&quot;, &quot;percent&quot;, TimeUnit.NANOSECONDS)</span><br><span class="line"></span><br><span class="line">  this.logIdent = &quot;[Kafka Request Handler on Broker &quot; + brokerId + &quot;], &quot;</span><br><span class="line">  // TODO 弄清楚threads和runnables的区别</span><br><span class="line">  val threads = new Array[Thread](numThreads) // 后台启动的handler线程</span><br><span class="line">  val runnables = new Array[KafkaRequestHandler](numThreads) // 存放handler线程</span><br><span class="line">  for(i &lt;- 0 until numThreads) &#123;</span><br><span class="line">    runnables(i) = new KafkaRequestHandler(i, brokerId, aggregateIdleMeter, numThreads, requestChannel, apis)</span><br><span class="line">    // 以Daemon方式启动线程</span><br><span class="line">    threads(i) = Utils.daemonThread(&quot;kafka-request-handler-&quot; + i, runnables(i))</span><br><span class="line">    threads(i).start()</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  def shutdown() &#123;</span><br><span class="line">    info(&quot;shutting down&quot;)</span><br><span class="line">    for(handler &lt;- runnables)</span><br><span class="line">      handler.shutdown</span><br><span class="line">    for(thread &lt;- threads)</span><br><span class="line">      thread.join</span><br><span class="line">    info(&quot;shut down completely&quot;)</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="线程模型"><a class="markdownIt-Anchor" href="#线程模型"></a> 线程模型</h2>
+<p>通过前面的总体流程，我们可以看到一个请求会在不同的线程中处理和转发，在这一部分，我们会关注每个线程具体的操作。总的来说，Kafka的网络线程模型采用的 Reactor 多线程模型：一个1+N+M模型：1个acceptor，N个processor，M个handler</p>
+<ul>
+<li>acceptor：监听端口，接受新连接的到来，将新连接以轮询的方式派发给processor</li>
+<li>processor：接受request，发送response</li>
+<li>handler：通过requestQueue，处理processor发来的request，生成response加入到response queue中</li>
+</ul>
+<p>网络模型除了reactor模型外，还有Proactor模型，本文不再展开，如果有兴趣可以参阅高性能网络框架：Reactor 和 Proactor TOOD link</p>
+<h3 id="acceptor"><a class="markdownIt-Anchor" href="#acceptor"></a> acceptor</h3>
+<p>acceptor的主要工作是监听端口，将新来的连接以轮询的方式派发给自己拥有的processor线程。因为acceptor处于连接入口，所以acceptor同时肩负着控制连接数的重任。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><span class="line">def run() &#123;</span><br><span class="line">  // 注册OP_ACCEPT事件，当有新的客户端连接到来时，事件触发</span><br><span class="line">  // 类似的事件还有OP_CONNECT，但是OP_CONNECT只能给client端使用，语义：SocketChannel.connect()请求连接成功后就绪</span><br><span class="line">  serverChannel.register(nioSelector, SelectionKey.OP_ACCEPT)</span><br><span class="line">  startupComplete() // 计数减1，当计数为0时唤醒所有的await，在这里执行成功之后SocketServer.startup()被唤醒继续执行</span><br><span class="line">  try &#123;</span><br><span class="line">    var currentProcessor = 0</span><br><span class="line">    while (isRunning) &#123;</span><br><span class="line">      try &#123;</span><br><span class="line">        val ready = nioSelector.select(500)</span><br><span class="line">        if (ready &gt; 0) &#123;</span><br><span class="line">          // 如果有新的连接</span><br><span class="line">          val keys = nioSelector.selectedKeys()</span><br><span class="line">          val iter = keys.iterator()</span><br><span class="line">          while (iter.hasNext &amp;&amp; isRunning) &#123;</span><br><span class="line">            try &#123;</span><br><span class="line">              val key = iter.next</span><br><span class="line">              iter.remove()</span><br><span class="line">              if (key.isAcceptable)</span><br><span class="line">                 // round-robin，processor只是简单地将该连接的channel加到一个list中，等到下一次poll在更新</span><br><span class="line">                accept(key, processors(currentProcessor))</span><br><span class="line">              else</span><br><span class="line">                throw new IllegalStateException(&quot;Unrecognized key state for acceptor thread.&quot;)</span><br><span class="line"></span><br><span class="line">              // round robin to the next processor thread</span><br><span class="line">              currentProcessor = (currentProcessor + 1) % processors.length</span><br><span class="line">            &#125; catch &#123;</span><br><span class="line">              case e: Throwable =&gt; error(&quot;Error while accepting connection&quot;, e)</span><br><span class="line">            &#125;</span><br><span class="line">          &#125;</span><br><span class="line">        &#125;</span><br><span class="line">      &#125;</span><br><span class="line">      catch &#123;</span><br><span class="line">        // We catch all the throwables to prevent the acceptor thread from exiting on exceptions due</span><br><span class="line">        // to a select operation on a specific channel or a bad request. We don&#x27;t want the</span><br><span class="line">        // the broker to stop responding to requests from other clients in these scenarios.</span><br><span class="line">        case e: ControlThrowable =&gt; throw e</span><br><span class="line">        case e: Throwable =&gt; error(&quot;Error occurred&quot;, e)</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; finally &#123;</span><br><span class="line">    debug(&quot;Closing server socket and selector.&quot;)</span><br><span class="line">    swallowError(serverChannel.close())</span><br><span class="line">    swallowError(nioSelector.close())</span><br><span class="line">    shutdownComplete()</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>新连接到来时acceptor具体的操作：为新来的连接生成好socketChannel，然后将socketChannel转移给processor。但是processor收到新连接，并不会马上处理，而是将其暂时缓存，到下一轮poll统一处理</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">// acceptor</span><br><span class="line">def accept(key: SelectionKey, processor: Processor) &#123;</span><br><span class="line">    val serverSocketChannel = key.channel().asInstanceOf[ServerSocketChannel]</span><br><span class="line">    val socketChannel = serverSocketChannel.accept() // accept什么？</span><br><span class="line">    try &#123;</span><br><span class="line">      // 这里如果同一个address的连接数超过限制则会抛出TooManyConnectionsException异常拒绝处理</span><br><span class="line">      connectionQuotas.inc(socketChannel.socket().getInetAddress)</span><br><span class="line">      socketChannel.configureBlocking(false)</span><br><span class="line">      socketChannel.socket().setTcpNoDelay(true)      // 开启TCP_NODELAY，禁用Nagle算法，允许小包发送</span><br><span class="line">      socketChannel.socket().setKeepAlive(true)</span><br><span class="line">      socketChannel.socket().setSendBufferSize(sendBufferSize)</span><br><span class="line"></span><br><span class="line">      debug(&quot;Accepted connection from %s on %s and assigned it to processor %d, sendBufferSize [actual|requested]: [%d|%d] recvBufferSize [actual|requested]: [%d|%d]&quot;</span><br><span class="line">            .format(socketChannel.socket.getRemoteSocketAddress, socketChannel.socket.getLocalSocketAddress, processor.id,</span><br><span class="line">                  socketChannel.socket.getSendBufferSize, sendBufferSize,</span><br><span class="line">                  socketChannel.socket.getReceiveBufferSize, recvBufferSize))</span><br><span class="line"></span><br><span class="line">      processor.accept(socketChannel) // 将channel转移给processor处理，processor只是简单的加到一个队列中，等待下一轮poll才会真正处理心连接</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">      case e: TooManyConnectionsException =&gt;</span><br><span class="line">        info(&quot;Rejected connection from %s, address already has the configured maximum of %d connections.&quot;.format(e.ip, e.count))</span><br><span class="line">        close(socketChannel)</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">// processor</span><br><span class="line">def accept(socketChannel: SocketChannel) &#123;</span><br><span class="line">    newConnections.add(socketChannel)</span><br><span class="line">    wakeup() // 如果selector因为IO block，那么唤醒它</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="processor线程"><a class="markdownIt-Anchor" href="#processor线程"></a> processor线程</h3>
+<p>processor负责接收客户端的请求，同时将请求结果回复给客户端。processor一次循环会依次处理：</p>
+<ol>
+<li>注册上一轮poll期间acceptor分配来的新连接</li>
+<li>处理新的response任务</li>
+<li>执行selector.poll，等待IO事件</li>
+<li>处理新的就绪请求，将其加入到RequstQueue</li>
+<li>处理发送成功的response，将发送完的response从inflightResponse队列中删除</li>
+<li>如果有连接关闭，将与其相关的response从inflightResponse队列中删除</li>
+</ol>
+<p>TODO 这里的顺序可以变动吗</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line">override def run() &#123;</span><br><span class="line">   startupComplete() // 已经启动，计数器减一，不过暂时没有地方等待processor的启动成功</span><br><span class="line">   while (isRunning) &#123;</span><br><span class="line">     try &#123;</span><br><span class="line">       // setup any new connections that have been queued up</span><br><span class="line">       // 1.首先注册上一轮poll期间到达的新连接</span><br><span class="line">       configureNewConnections()</span><br><span class="line">       // register any new responses for writing</span><br><span class="line">       processNewResponses() // 2. 处理这个processor的新的response任务</span><br><span class="line">       poll() // 3.selector.poll(300)，如果有就绪消息事件，或者超时事件发生，否则会一直block</span><br><span class="line">       processCompletedReceives() // 4.处理完整接收好的请求，加入到requestQueue，这一步会因为竞争被阻塞</span><br><span class="line">       processCompletedSends() // 5.更新inflightResponses队列，将发送完的response从队列中删除</span><br><span class="line">       processDisconnected() // 6.有连接关闭，清理inflightResponses队列中相关的response</span><br><span class="line">     &#125; catch &#123;</span><br><span class="line">       // We catch all the throwables here to prevent the processor thread from exiting. We do this because</span><br><span class="line">       // letting a processor exit might cause a bigger impact on the broker. Usually the exceptions thrown would</span><br><span class="line">       // be either associated with a specific socket channel or a bad request. We just ignore the bad socket channel</span><br><span class="line">       // or request. This behavior might need to be reviewed if we see an exception that need the entire broker to stop.</span><br><span class="line">       case e: ControlThrowable =&gt; throw e</span><br><span class="line">       case e: Throwable =&gt;</span><br><span class="line">         error(&quot;Processor got uncaught exception.&quot;, e)</span><br><span class="line">     &#125;</span><br><span class="line">   &#125;</span><br><span class="line"></span><br><span class="line">   debug(&quot;Closing selector - processor &quot; + id)</span><br><span class="line">   swallowError(closeAll())</span><br><span class="line">   shutdownComplete()</span><br><span class="line"> &#125;</span><br></pre></td></tr></table></figure>
+<h3 id="注册新连接"><a class="markdownIt-Anchor" href="#注册新连接"></a> 注册新连接</h3>
+<p>主要要向selector注册新连接的ON_READ事件，后续收到数据才能被唤醒</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">private def configureNewConnections() &#123;</span><br><span class="line">  while (!newConnections.isEmpty) &#123;</span><br><span class="line">    val channel = newConnections.poll()</span><br><span class="line">    try &#123;</span><br><span class="line">      debug(s&quot;Processor $id listening to new connection from $&#123;channel.socket.getRemoteSocketAddress&#125;&quot;)</span><br><span class="line">      val localHost = channel.socket().getLocalAddress.getHostAddress</span><br><span class="line">      val localPort = channel.socket().getLocalPort</span><br><span class="line">      val remoteHost = channel.socket().getInetAddress.getHostAddress</span><br><span class="line">      val remotePort = channel.socket().getPort</span><br><span class="line">      // 生成唯一的connectionId</span><br><span class="line">      val connectionId = ConnectionId(localHost, localPort, remoteHost, remotePort).toString</span><br><span class="line">      // 向selector注册channel的OP_READ事件</span><br><span class="line">      selector.register(connectionId, channel)</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">      // We explicitly catch all non fatal exceptions and close the socket to avoid a socket leak. The other</span><br><span class="line">      // throwables will be caught in processor and logged as uncaught exceptions.</span><br><span class="line">      case NonFatal(e) =&gt;</span><br><span class="line">        // need to close the channel here to avoid a socket leak.</span><br><span class="line">        close(channel)</span><br><span class="line">        error(s&quot;Processor $id closed connection from $&#123;channel.getRemoteAddress&#125;&quot;, e)</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="处理新的response"><a class="markdownIt-Anchor" href="#处理新的response"></a> 处理新的response</h3>
+<p>将新的response发送给selector后，将其加入到inflightResponse中，inflightResponse表示正在发送的response</p>
+<p>TODO 插入一点NIO的基本知识</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line">private def processNewResponses() &#123;</span><br><span class="line">  var curr = requestChannel.receiveResponse(id)</span><br><span class="line">  while (curr != null) &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">      curr.responseAction match &#123;</span><br><span class="line">        case RequestChannel.NoOpAction =&gt;</span><br><span class="line">          // There is no response to send to the client, we need to read more pipelined requests</span><br><span class="line">          // that are sitting in the server&#x27;s socket buffer</span><br><span class="line">          curr.request.updateRequestMetrics</span><br><span class="line">          trace(&quot;Socket server received empty response to send, registering for read: &quot; + curr)</span><br><span class="line">          // 请求不需要回复，已经处理完，unmute channel</span><br><span class="line">          selector.unmute(curr.request.connectionId)</span><br><span class="line">        case RequestChannel.SendAction =&gt;</span><br><span class="line">          // 将response发送给selector</span><br><span class="line">          sendResponse(curr)</span><br><span class="line">        case RequestChannel.CloseConnectionAction =&gt;</span><br><span class="line">          curr.request.updateRequestMetrics</span><br><span class="line">          trace(&quot;Closing socket connection actively according to the response code.&quot;)</span><br><span class="line">          close(selector, curr.request.connectionId)</span><br><span class="line">      &#125;</span><br><span class="line">    &#125; finally &#123;</span><br><span class="line">      curr = requestChannel.receiveResponse(id) // 循环迭代</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">/* `protected` for test usage */</span><br><span class="line">protected[network] def sendResponse(response: RequestChannel.Response) &#123;</span><br><span class="line">  trace(s&quot;Socket server received response to send, registering for write and sending data: $response&quot;)</span><br><span class="line">  val channel = selector.channel(response.responseSend.destination)</span><br><span class="line">  // `channel` can be null if the selector closed the connection because it was idle for too long</span><br><span class="line">  if (channel == null) &#123;</span><br><span class="line">    // 连接关闭了</span><br><span class="line">    warn(s&quot;Attempting to send response via channel for which there is no open connection, connection id $id&quot;)</span><br><span class="line">    response.request.updateRequestMetrics()</span><br><span class="line">  &#125;</span><br><span class="line">  else &#123;</span><br><span class="line">    // 将response发送给selector，然后将其加入到inflightResponses队列</span><br><span class="line">    selector.send(response.responseSend)</span><br><span class="line">    inflightResponses += (response.request.connectionId -&gt; response)</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="poll"><a class="markdownIt-Anchor" href="#poll"></a> poll</h3>
+<p>主要是调用selector.poll函数，这个函数以non-blocking的方式完成网络IO操作，如果没有就绪的请求，最多等待300ms返回</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">private def poll() &#123;</span><br><span class="line">   try selector.poll(300) //在这里沉睡</span><br><span class="line">   catch &#123;</span><br><span class="line">     case e @ (_: IllegalStateException | _: IOException) =&gt;</span><br><span class="line">       error(s&quot;Closing processor $id due to illegal state or IO exception&quot;)</span><br><span class="line">       swallow(closeAll())</span><br><span class="line">       shutdownComplete()</span><br><span class="line">       throw e</span><br><span class="line">   &#125;</span><br><span class="line"> &#125;</span><br></pre></td></tr></table></figure>
+<h3 id="处理新的就绪请求"><a class="markdownIt-Anchor" href="#处理新的就绪请求"></a> 处理新的就绪请求</h3>
+<p>processor将就绪请求封装成内部的Request数据，然后将其加入到RequestQueue队列， 这一步会发生锁竞争导致堵塞。</p>
+<p>另外，需要注意的是，为了保证同一个连接的请求保持一来一回的顺序，请求之间保持有序，Kafka使用了mute机制</p>
+<p>TODO 疑问 为什么要共用一把锁</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">private def processCompletedReceives() &#123;</span><br><span class="line">  selector.completedReceives.asScala.foreach &#123; receive =&gt;</span><br><span class="line">    try &#123;</span><br><span class="line">      val channel = selector.channel(receive.source)</span><br><span class="line">      val session = RequestChannel.Session(new KafkaPrincipal(KafkaPrincipal.USER_TYPE, channel.principal.getName),</span><br><span class="line">        channel.socketAddress)</span><br><span class="line">      val req = RequestChannel.Request(processor = id, connectionId = receive.source, session = session, buffer = receive.payload, startTimeMs = time.milliseconds, securityProtocol = protocol)</span><br><span class="line">      // 这里会阻塞，requestQueue是ArrayBlockingQueue</span><br><span class="line">      requestChannel.sendRequest(req)</span><br><span class="line">      // 为了保证同一个连接上请求的有序性：后来的请求的回复不会先于早来的到达，会mute这个channel，直到请求的回复被对方接受</span><br><span class="line">      selector.mute(receive.source)</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">      case e @ (_: InvalidRequestException | _: SchemaException) =&gt;</span><br><span class="line">        // note that even though we got an exception, we can assume that receive.source is valid. Issues with constructing a valid receive object were handled earlier</span><br><span class="line">        error(s&quot;Closing socket for $&#123;receive.source&#125; because of error&quot;, e)</span><br><span class="line">        close(selector, receive.source)</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="处理发送成功的response"><a class="markdownIt-Anchor" href="#处理发送成功的response"></a> 处理发送成功的response</h3>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">private def processCompletedSends() &#123;</span><br><span class="line">  selector.completedSends.asScala.foreach &#123; send =&gt;</span><br><span class="line">    // 将已经发送成功的response从inflightResponse中删除</span><br><span class="line">    val resp = inflightResponses.remove(send.destination).getOrElse &#123;</span><br><span class="line">      throw new IllegalStateException(s&quot;Send for $&#123;send.destination&#125; completed, but not in `inflightResponses`&quot;)</span><br><span class="line">    &#125;</span><br><span class="line">    resp.request.updateRequestMetrics()</span><br><span class="line">    // 恢复channel的监听</span><br><span class="line">    selector.unmute(send.destination)</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="连接关闭收尾"><a class="markdownIt-Anchor" href="#连接关闭收尾"></a> 连接关闭收尾</h3>
+<p>处理两件事：</p>
+<ul>
+<li>更新inflightResponse，将相关的response删除</li>
+<li>更新ConnectionQuota</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">private def processDisconnected() &#123;</span><br><span class="line">  selector.disconnected.asScala.foreach &#123; connectionId =&gt;</span><br><span class="line">    val remoteHost = ConnectionId.fromString(connectionId).getOrElse &#123;</span><br><span class="line">      throw new IllegalStateException(s&quot;connectionId has unexpected format: $connectionId&quot;)</span><br><span class="line">    &#125;.remoteHost</span><br><span class="line">    // 删除所有和connectionId相关的response，同时更新metrics</span><br><span class="line">    inflightResponses.remove(connectionId).foreach(_.request.updateRequestMetrics())</span><br><span class="line">    // the channel has been closed by the selector but the quotas still need to be updated</span><br><span class="line">    // 更新Quota，</span><br><span class="line">    connectionQuotas.dec(InetAddress.getByName(remoteHost))</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="kafkarequesthandler线程"><a class="markdownIt-Anchor" href="#kafkarequesthandler线程"></a> KafkaRequestHandler线程</h2>
+<p>handler从requestQueue中拉取请求，然后通过KafkaApis将请求dispatch到相应的组件上继续处理，handler主要负责两件事：</p>
+<ul>
+<li>请求的执行，一般会把请求从KafkaApis转移到其他组件继续执行</li>
+<li>生成response，一般是把生成response的操作封装成一个函数，将其传入到其他组件。当其他组件处理完请求时，调用回调函数生成response消息，并将其追加到相应processor的response queue中。</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line">def run() &#123;</span><br><span class="line">  while(true) &#123;</span><br><span class="line">    try &#123;</span><br><span class="line">      var req : RequestChannel.Request = null</span><br><span class="line">      while (req == null) &#123;</span><br><span class="line">        // We use a single meter for aggregate idle percentage for the thread pool.</span><br><span class="line">        // Since meter is calculated as total_recorded_value / time_window and</span><br><span class="line">        // time_window is independent of the number of threads, each recorded idle</span><br><span class="line">        // time should be discounted by # threads.</span><br><span class="line">        val startSelectTime = SystemTime.nanoseconds</span><br><span class="line">        // receiveRequest有两个实现，还有一个无参实现，两者的区别在于调用ArrayBlockingQueue不同的接口</span><br><span class="line">        // 带timeout的调用queue.poll(timeout) ，如果没有数据等待timeout后返回空</span><br><span class="line">        // 无参的调用queue.take() 如果没有数据，则会挂起等待，直到有数据</span><br><span class="line">        req = requestChannel.receiveRequest(300)</span><br><span class="line">        val idleTime = SystemTime.nanoseconds - startSelectTime</span><br><span class="line">        aggregateIdleMeter.mark(idleTime / totalHandlerThreads)</span><br><span class="line">      &#125;</span><br><span class="line"></span><br><span class="line">      if(req eq RequestChannel.AllDone) &#123;</span><br><span class="line">        // 当上层关闭KafkaRequestHandlerPool，会依次调用每个handler的shutdown</span><br><span class="line">        // 每个handler往RequestQueue里发送AllDone请求，通知run loop退出</span><br><span class="line">        debug(&quot;Kafka request handler %d on broker %d received shut down command&quot;.format(</span><br><span class="line">          id, brokerId))</span><br><span class="line">        return</span><br><span class="line">      &#125;</span><br><span class="line">      req.requestDequeueTimeMs = SystemTime.milliseconds</span><br><span class="line">      trace(&quot;Kafka request handler %d on broker %d handling request %s&quot;.format(id, brokerId, req))</span><br><span class="line">      apis.handle(req) // dispatch，请求处理转移到KafkaApis，之后在转到请求对应的组件去</span><br><span class="line">    &#125; catch &#123;</span><br><span class="line">      case e: Throwable =&gt; error(&quot;Exception when handling request&quot;, e)</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>KafkaApis.handle根据不同的请求，调用不同的函数处理</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line">def handle(request: RequestChannel.Request) &#123;</span><br><span class="line">  try &#123;</span><br><span class="line">    trace(&quot;Handling request:%s from connection %s;securityProtocol:%s,principal:%s&quot;.</span><br><span class="line">      format(request.requestDesc(true), request.connectionId, request.securityProtocol, request.session.principal))</span><br><span class="line">    ApiKeys.forId(request.requestId) match &#123;</span><br><span class="line">        // 可以看到，所有的请求都是流经同一个request queue，没有优先级的区别</span><br><span class="line">      case ApiKeys.PRODUCE =&gt; handleProducerRequest(request)</span><br><span class="line">      case ApiKeys.FETCH =&gt; handleFetchRequest(request)</span><br><span class="line">      case ApiKeys.LIST_OFFSETS =&gt; handleOffsetRequest(request)</span><br><span class="line">      case ApiKeys.METADATA =&gt; handleTopicMetadataRequest(request)</span><br><span class="line">      case ApiKeys.LEADER_AND_ISR =&gt; handleLeaderAndIsrRequest(request)</span><br><span class="line">      case ApiKeys.STOP_REPLICA =&gt; handleStopReplicaRequest(request)</span><br><span class="line">      case ApiKeys.UPDATE_METADATA_KEY =&gt; handleUpdateMetadataRequest(request)</span><br><span class="line">      case ApiKeys.CONTROLLED_SHUTDOWN_KEY =&gt; handleControlledShutdownRequest(request)</span><br><span class="line">      case ApiKeys.OFFSET_COMMIT =&gt; handleOffsetCommitRequest(request)</span><br><span class="line">      case ApiKeys.OFFSET_FETCH =&gt; handleOffsetFetchRequest(request)</span><br><span class="line">      case ApiKeys.GROUP_COORDINATOR =&gt; handleGroupCoordinatorRequest(request)</span><br><span class="line">      case ApiKeys.JOIN_GROUP =&gt; handleJoinGroupRequest(request)</span><br><span class="line">      case ApiKeys.HEARTBEAT =&gt; handleHeartbeatRequest(request)</span><br><span class="line">      case ApiKeys.LEAVE_GROUP =&gt; handleLeaveGroupRequest(request)</span><br><span class="line">      case ApiKeys.SYNC_GROUP =&gt; handleSyncGroupRequest(request)</span><br><span class="line">      case ApiKeys.DESCRIBE_GROUPS =&gt; handleDescribeGroupRequest(request)</span><br><span class="line">      case ApiKeys.LIST_GROUPS =&gt; handleListGroupsRequest(request)</span><br><span class="line">      case ApiKeys.SASL_HANDSHAKE =&gt; handleSaslHandshakeRequest(request)</span><br><span class="line">      case ApiKeys.API_VERSIONS =&gt; handleApiVersionsRequest(request)</span><br><span class="line">      case requestId =&gt; throw new KafkaException(&quot;Unknown api code &quot; + requestId)</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; catch &#123;</span><br><span class="line">    case e: Throwable =&gt;</span><br><span class="line">      if (request.requestObj != null) &#123;</span><br><span class="line">        request.requestObj.handleError(e, requestChannel, request)</span><br><span class="line">        error(&quot;Error when handling request %s&quot;.format(request.requestObj), e)</span><br><span class="line">      &#125; else &#123;</span><br><span class="line">        val response = request.body.getErrorResponse(request.header.apiVersion, e)</span><br><span class="line">        val respHeader = new ResponseHeader(request.header.correlationId)</span><br><span class="line"></span><br><span class="line">        /* If request doesn&#x27;t have a default error response, we just close the connection.</span><br><span class="line">           For example, when produce request has acks set to 0 */</span><br><span class="line">        if (response == null)</span><br><span class="line">          requestChannel.closeConnection(request.processor, request)</span><br><span class="line">        else</span><br><span class="line">          requestChannel.sendResponse(new Response(request, new ResponseSend(request.connectionId, respHeader, response)))</span><br><span class="line"></span><br><span class="line">        error(&quot;Error when handling request %s&quot;.format(request.body), e)</span><br><span class="line">      &#125;</span><br><span class="line">  &#125; finally</span><br><span class="line">    request.apiLocalCompleteTimeMs = SystemTime.milliseconds</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>下面我们以「follower fetch」为例，梳理一下KafkaApi侧完成一次请求需要的流程：</p>
+<p>验证fetch请求合法性</p>
+<ul>
+<li>定义回调函数sendResponseCallback，重新定义了fetch请求的response结构和send结构</li>
+<li>转到replica组件继续执行fetch请求，同时传入sendResponseCallback等结束调用生成response</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br></pre></td><td class="code"><pre><span class="line">/**</span><br><span class="line"> * Handle a fetch request</span><br><span class="line"> */</span><br><span class="line">def handleFetchRequest(request: RequestChannel.Request) &#123;</span><br><span class="line">  val fetchRequest = request.requestObj.asInstanceOf[FetchRequest]</span><br><span class="line"></span><br><span class="line">  // 1. 验证请求合法性，</span><br><span class="line">  val (authorizedRequestInfo, unauthorizedRequestInfo) = fetchRequest.requestInfo.partition &#123;</span><br><span class="line">    case (topicAndPartition, _) =&gt; authorize(request.session, Read, new Resource(Topic, topicAndPartition.topic))</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  val unauthorizedPartitionData = unauthorizedRequestInfo.mapValues &#123; _ =&gt;</span><br><span class="line">    FetchResponsePartitionData(Errors.TOPIC_AUTHORIZATION_FAILED.code, -1, MessageSet.Empty)</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  // the callback for sending a fetch response</span><br><span class="line">  // 2. 定义回调函数来生成fetch response</span><br><span class="line">  def sendResponseCallback(responsePartitionData: Map[TopicAndPartition, FetchResponsePartitionData]) &#123;</span><br><span class="line"></span><br><span class="line">    val convertedPartitionData =</span><br><span class="line">      // Need to down-convert message when consumer only takes magic value 0.</span><br><span class="line">      if (fetchRequest.versionId &lt;= 1) &#123;</span><br><span class="line">        responsePartitionData.map &#123; case (tp, data) =&gt;</span><br><span class="line"></span><br><span class="line">          // We only do down-conversion when:</span><br><span class="line">          // 1. The message format version configured for the topic is using magic value &gt; 0, and</span><br><span class="line">          // 2. The message set contains message whose magic &gt; 0</span><br><span class="line">          // This is to reduce the message format conversion as much as possible. The conversion will only occur</span><br><span class="line">          // when new message format is used for the topic and we see an old request.</span><br><span class="line">          // Please note that if the message format is changed from a higher version back to lower version this</span><br><span class="line">          // test might break because some messages in new message format can be delivered to consumers before 0.10.0.0</span><br><span class="line">          // without format down conversion.</span><br><span class="line">          val convertedData = if (replicaManager.getMessageFormatVersion(tp).exists(_ &gt; Message.MagicValue_V0) &amp;&amp;</span><br><span class="line">            !data.messages.isMagicValueInAllWrapperMessages(Message.MagicValue_V0)) &#123;</span><br><span class="line">            trace(s&quot;Down converting message to V0 for fetch request from $&#123;fetchRequest.clientId&#125;&quot;)</span><br><span class="line">            new FetchResponsePartitionData(data.error, data.hw, data.messages.asInstanceOf[FileMessageSet].toMessageFormat(Message.MagicValue_V0))</span><br><span class="line">          &#125; else data</span><br><span class="line"></span><br><span class="line">          tp -&gt; convertedData</span><br><span class="line">        &#125;</span><br><span class="line">      &#125; else responsePartitionData</span><br><span class="line"></span><br><span class="line">    val mergedPartitionData = convertedPartitionData ++ unauthorizedPartitionData</span><br><span class="line"></span><br><span class="line">    mergedPartitionData.foreach &#123; case (topicAndPartition, data) =&gt;</span><br><span class="line">      if (data.error != Errors.NONE.code)</span><br><span class="line">        debug(s&quot;Fetch request with correlation id $&#123;fetchRequest.correlationId&#125; from client $&#123;fetchRequest.clientId&#125; &quot; +</span><br><span class="line">          s&quot;on partition $topicAndPartition failed due to $&#123;Errors.forCode(data.error).exceptionName&#125;&quot;)</span><br><span class="line">      // record the bytes out metrics only when the response is being sent</span><br><span class="line">      BrokerTopicStats.getBrokerTopicStats(topicAndPartition.topic).bytesOutRate.mark(data.messages.sizeInBytes)</span><br><span class="line">      BrokerTopicStats.getBrokerAllTopicsStats().bytesOutRate.mark(data.messages.sizeInBytes)</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    // 生成response数据的地方</span><br><span class="line">    def fetchResponseCallback(delayTimeMs: Int) &#123;</span><br><span class="line">      trace(s&quot;Sending fetch response to client $&#123;fetchRequest.clientId&#125; of &quot; +</span><br><span class="line">        s&quot;$&#123;convertedPartitionData.values.map(_.messages.sizeInBytes).sum&#125; bytes&quot;)</span><br><span class="line">      // 自己重新实现了Response</span><br><span class="line">      val response = FetchResponse(fetchRequest.correlationId, mergedPartitionData, fetchRequest.versionId, delayTimeMs)</span><br><span class="line">      // 没有用ByteBuffer的Send操作，重写了一套send方法，大概是多路写提高效率？</span><br><span class="line">      requestChannel.sendResponse(new RequestChannel.Response(request, new FetchResponseSend(request.connectionId, response)))</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">    // When this callback is triggered, the remote API call has completed</span><br><span class="line">    request.apiRemoteCompleteTimeMs = SystemTime.milliseconds</span><br><span class="line"></span><br><span class="line">    // Do not throttle replication traffic</span><br><span class="line">    if (fetchRequest.isFromFollower) &#123;</span><br><span class="line">      fetchResponseCallback(0)</span><br><span class="line">    &#125; else &#123;</span><br><span class="line">      quotaManagers(ApiKeys.FETCH.id).recordAndMaybeThrottle(fetchRequest.clientId,</span><br><span class="line">                                                             FetchResponse.responseSize(mergedPartitionData.groupBy(_._1.topic),</span><br><span class="line">                                                                                        fetchRequest.versionId),</span><br><span class="line">                                                             fetchResponseCallback)</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  if (authorizedRequestInfo.isEmpty)</span><br><span class="line">    sendResponseCallback(Map.empty)</span><br><span class="line">  else &#123;</span><br><span class="line">    // 3. call the replica manager to fetch messages from the local replica</span><br><span class="line">    replicaManager.fetchMessages(</span><br><span class="line">      fetchRequest.maxWait.toLong,</span><br><span class="line">      fetchRequest.replicaId,</span><br><span class="line">      fetchRequest.minBytes,</span><br><span class="line">      authorizedRequestInfo,</span><br><span class="line">      sendResponseCallback)</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="数据接口"><a class="markdownIt-Anchor" href="#数据接口"></a> 数据接口</h2>
+<p>整个请求链路中，存在两个对外的数据接口：Request和Response，分别对应着请求链路的入口和出口。</p>
+<h3 id="request"><a class="markdownIt-Anchor" href="#request"></a> request</h3>
+<p>生成request时候需要传入processor和connectId信息，因为response是根据request生成的，生成好后需要根据request的processor信息将response放到相同processor的responseQueue中。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">// request和processor绑定，因为相应的response也要回到相同的processor上</span><br><span class="line">  case class Request(processor: Int, connectionId: String, session: Session, private var buffer: ByteBuffer, startTimeMs: Long, securityProtocol: SecurityProtocol) &#123;</span><br><span class="line">    // These need to be volatile because the readers are in the network thread and the writers are in the request</span><br><span class="line">    // handler threads or the purgatory threads</span><br><span class="line">    // 记录一个请求不同阶段的耗，在调用updateRequestMetrics函数前，记录的是毫秒级别的时间戳</span><br><span class="line">    // updateRequestMetrics会在processor执行processNewResponses函数时统一调用，在计算出正确的结果</span><br><span class="line">    @volatile var requestDequeueTimeMs = -1L</span><br><span class="line">    @volatile var apiLocalCompleteTimeMs = -1L</span><br><span class="line">    @volatile var responseCompleteTimeMs = -1L</span><br><span class="line">    @volatile var responseDequeueTimeMs = -1L</span><br><span class="line">    @volatile var apiRemoteCompleteTimeMs = -1L</span><br><span class="line"></span><br><span class="line">    val requestId = buffer.getShort()</span><br><span class="line"></span><br><span class="line">    // TODO: this will be removed once we migrated to client-side format</span><br><span class="line">    // for server-side request / response format</span><br><span class="line">    // NOTE: this map only includes the server-side request/response handlers. Newer</span><br><span class="line">    // request types should only use the client-side versions which are parsed with</span><br><span class="line">    // o.a.k.common.requests.AbstractRequest.getRequest()</span><br><span class="line">    private val keyToNameAndDeserializerMap: Map[Short, (ByteBuffer) =&gt; RequestOrResponse]=</span><br><span class="line">      Map(ApiKeys.FETCH.id -&gt; FetchRequest.readFrom,</span><br><span class="line">        ApiKeys.CONTROLLED_SHUTDOWN_KEY.id -&gt; ControlledShutdownRequest.readFrom</span><br><span class="line">      )</span><br><span class="line"></span><br><span class="line">    // TODO: this will be removed once we migrated to client-side format</span><br><span class="line">    val requestObj =</span><br><span class="line">      keyToNameAndDeserializerMap.get(requestId).map(readFrom =&gt; readFrom(buffer)).orNull</span><br><span class="line"></span><br><span class="line">    // if we failed to find a server-side mapping, then try using the</span><br><span class="line">    // client-side request / response format</span><br><span class="line">    val header: RequestHeader =</span><br><span class="line">      if (requestObj == null) &#123;</span><br><span class="line">        buffer.rewind</span><br><span class="line">        try RequestHeader.parse(buffer)</span><br><span class="line">        catch &#123;</span><br><span class="line">          case ex: Throwable =&gt;</span><br><span class="line">            throw new InvalidRequestException(s&quot;Error parsing request header. Our best guess of the apiKey is: $requestId&quot;, ex)</span><br><span class="line">        &#125;</span><br><span class="line">      &#125; else</span><br><span class="line">        null</span><br><span class="line">    val body: AbstractRequest =</span><br><span class="line">      if (requestObj == null)</span><br><span class="line">        try &#123;</span><br><span class="line">          // For unsupported version of ApiVersionsRequest, create a dummy request to enable an error response to be returned later</span><br><span class="line">          if (header.apiKey == ApiKeys.API_VERSIONS.id &amp;&amp; !Protocol.apiVersionSupported(header.apiKey, header.apiVersion))</span><br><span class="line">            new ApiVersionsRequest</span><br><span class="line">          else</span><br><span class="line">            AbstractRequest.getRequest(header.apiKey, header.apiVersion, buffer)</span><br><span class="line">        &#125; catch &#123;</span><br><span class="line">          case ex: Throwable =&gt;</span><br><span class="line">            throw new InvalidRequestException(s&quot;Error getting request for apiKey: $&#123;header.apiKey&#125; and apiVersion: $&#123;header.apiVersion&#125;&quot;, ex)</span><br><span class="line">        &#125;</span><br><span class="line">      else</span><br><span class="line">        null</span><br><span class="line"></span><br><span class="line">    buffer = null</span><br><span class="line">    private val requestLogger = Logger.getLogger(&quot;kafka.request.logger&quot;)</span><br><span class="line"></span><br><span class="line">    trace(&quot;Processor %d received request : %s&quot;.format(processor, requestDesc(true)))</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+<h3 id="response"><a class="markdownIt-Anchor" href="#response"></a> Response</h3>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">case class Response(processor: Int, request: Request, responseSend: Send, responseAction: ResponseAction) &#123;</span><br><span class="line">  request.responseCompleteTimeMs = SystemTime.milliseconds</span><br><span class="line"></span><br><span class="line">  def this(processor: Int, request: Request, responseSend: Send) =</span><br><span class="line">    this(processor, request, responseSend, if (responseSend == null) NoOpAction else SendAction)</span><br><span class="line"></span><br><span class="line">  def this(request: Request, send: Send) =</span><br><span class="line">    this(request.processor, request, send)</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">trait ResponseAction</span><br><span class="line">case object SendAction extends ResponseAction</span><br><span class="line">case object NoOpAction extends ResponseAction</span><br><span class="line">case object CloseConnectionAction extends ResponseAction</span><br></pre></td></tr></table></figure>
+<p>与常见的Response有些不同，Kafka的Response不关注返回数据本身，而是关注数据如何写入socket channel，所以response主要保存的是一个函数接口send，这个接口描述了response数据以何种方式写入到channel中。processor收到这个response时，也只是将其传入NIO的队列，等待NIO网络线程想要执行发送操作时，才会调用writeTo函数，按照上层定义的方式写入数据。Send接口的定义：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">/**</span><br><span class="line"> * This interface models the in-progress sending of data to a destination identified by an integer id.</span><br><span class="line"> */</span><br><span class="line">public interface Send &#123;</span><br><span class="line"></span><br><span class="line">    /**</span><br><span class="line">     * The numeric id for the destination of this send</span><br><span class="line">     */</span><br><span class="line">    public String destination();</span><br><span class="line"></span><br><span class="line">    /**</span><br><span class="line">     * Is this send complete?</span><br><span class="line">     */</span><br><span class="line">    public boolean completed();</span><br><span class="line"></span><br><span class="line">    /**</span><br><span class="line">     * Write some as-yet unwritten bytes from this send to the provided channel. It may take multiple calls for the send</span><br><span class="line">     * to be completely written</span><br><span class="line">     * @param channel The Channel to write to</span><br><span class="line">     * @return The number of bytes written</span><br><span class="line">     * @throws IOException If the write fails</span><br><span class="line">     */</span><br><span class="line">    public long writeTo(GatheringByteChannel channel) throws IOException;</span><br><span class="line"></span><br><span class="line">    /**</span><br><span class="line">     * Size of the send</span><br><span class="line">     */</span><br><span class="line">    public long size();</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="后续版本变动"><a class="markdownIt-Anchor" href="#后续版本变动"></a> 后续版本变动</h2>
+<p><a target="_blank" rel="noopener" href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-291%3A+Separating+controller+connections+and+requests+from+the+data+plane">KIP-291</a><br />
+<a target="_blank" rel="noopener" href="https://issues.apache.org/jira/browse/KAFKA-4453">Kafka-4453</a></p>
+<p>0.10.0版本下，所有的控制流请求和数据流请求都在同一个request queue，如果拥堵，会导致控制流请求没法得到及时更新。所以后续的社区更新将两个流拆分成两个独立的链路，从endpoint、acceptor、processor、handler、requestQueue、APIs等，都互不干扰。当然，两者占有的资源并不是等同的，毕竟控制流请求相对会更少，一般会配备1个acceptor线程、1个processor线程和20个位置requestQueue</p>
+<h2 id="尾记"><a class="markdownIt-Anchor" href="#尾记"></a> 尾记</h2>
+<p>文本通过源码阅读的方式，简略梳理了broker侧的请求处理链路，但仍有一些问题遗留：</p>
+<ul>
+<li>为什么acceptor、processor以普通用户线程运行，而handler则是以daemon线程运行</li>
+<li>网络层selector仍是一个黑盒子，Kafka在Java network NIO的基础上进行了一些封装。</li>
+<li>如果界定一个请求的边界，怎么定义一个请求的收到</li>
+<li>为什么会有组件自己实现Send接口，而不是简单地使用ByteNetworkSend</li>
+</ul>
+<h2 id="reference"><a class="markdownIt-Anchor" href="#reference"></a> reference</h2>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://tech.meituan.com/2016/11/04/nio.html">Java NIO浅析</a></li>
+<li><a target="_blank" rel="noopener" href="https://bbs.huaweicloud.com/blogs/266248?utm_source=zhihu&amp;utm_medium=bbs-ex&amp;utm_campaign=other&amp;utm_content=content">高性能网络框架：Reactor 和 Proactor</a></li>
+<li><a target="_blank" rel="noopener" href="http://matt33.com/2018/06/27/kafka-server-process-model">Kafka 源码解析之 Server 1+N+M 网络处理模型</a></li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/kafka/" rel="tag"># kafka</a>
+              <a href="/tags/source/" rel="tag"># source</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/2021/11/02/%E6%9D%82%E4%B8%83%E6%9D%82%E5%85%AB/cloud-FS/" rel="next" title="基于k8s+rancher+NFS搭建云平台">
+      基于k8s+rancher+NFS搭建云平台 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E4%BD%93%E6%B5%81%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text"> 总体流程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%85%B3%E9%94%AE%E7%BB%84%E4%BB%B6"><span class="nav-number">2.</span> <span class="nav-text"> 关键组件</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#socketserver"><span class="nav-number">2.1.</span> <span class="nav-text"> SocketServer</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%88%9D%E5%A7%8B%E5%8C%96"><span class="nav-number">2.1.1.</span> <span class="nav-text"> 初始化</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%90%AF%E5%8A%A8"><span class="nav-number">2.1.2.</span> <span class="nav-text"> 启动</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#kafkaapis"><span class="nav-number">2.2.</span> <span class="nav-text"> KafkaApis</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#kafkarequesthandlerpool"><span class="nav-number">2.3.</span> <span class="nav-text"> KafkaRequestHandlerPool</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BA%BF%E7%A8%8B%E6%A8%A1%E5%9E%8B"><span class="nav-number">3.</span> <span class="nav-text"> 线程模型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#acceptor"><span class="nav-number">3.1.</span> <span class="nav-text"> acceptor</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#processor%E7%BA%BF%E7%A8%8B"><span class="nav-number">3.2.</span> <span class="nav-text"> processor线程</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%B3%A8%E5%86%8C%E6%96%B0%E8%BF%9E%E6%8E%A5"><span class="nav-number">3.3.</span> <span class="nav-text"> 注册新连接</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%84%E7%90%86%E6%96%B0%E7%9A%84response"><span class="nav-number">3.4.</span> <span class="nav-text"> 处理新的response</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#poll"><span class="nav-number">3.5.</span> <span class="nav-text"> poll</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%84%E7%90%86%E6%96%B0%E7%9A%84%E5%B0%B1%E7%BB%AA%E8%AF%B7%E6%B1%82"><span class="nav-number">3.6.</span> <span class="nav-text"> 处理新的就绪请求</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%A4%84%E7%90%86%E5%8F%91%E9%80%81%E6%88%90%E5%8A%9F%E7%9A%84response"><span class="nav-number">3.7.</span> <span class="nav-text"> 处理发送成功的response</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%BF%9E%E6%8E%A5%E5%85%B3%E9%97%AD%E6%94%B6%E5%B0%BE"><span class="nav-number">3.8.</span> <span class="nav-text"> 连接关闭收尾</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#kafkarequesthandler%E7%BA%BF%E7%A8%8B"><span class="nav-number">4.</span> <span class="nav-text"> KafkaRequestHandler线程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%95%B0%E6%8D%AE%E6%8E%A5%E5%8F%A3"><span class="nav-number">5.</span> <span class="nav-text"> 数据接口</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#request"><span class="nav-number">5.1.</span> <span class="nav-text"> request</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#response"><span class="nav-number">5.2.</span> <span class="nav-text"> Response</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%90%8E%E7%BB%AD%E7%89%88%E6%9C%AC%E5%8F%98%E5%8A%A8"><span class="nav-number">6.</span> <span class="nav-text"> 后续版本变动</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%B0%BE%E8%AE%B0"><span class="nav-number">7.</span> <span class="nav-text"> 尾记</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#reference"><span class="nav-number">8.</span> <span class="nav-text"> reference</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="theGloves"
+      src="https://avatars.githubusercontent.com/u/20971570?s=400&u=b3d42c25f45664cc98985e0232b36f130c1ca3bb&v=4">
+  <p class="site-author-name" itemprop="name">theGloves</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+        <span class="site-state-item-count">6</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="mailto:yusfko@hotmail.com" title="E-Mail → mailto:yusfko@hotmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">theGloves</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://mist.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Mist</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

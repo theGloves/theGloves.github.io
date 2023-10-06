@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 7.0.0-rc2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"thegloves.github.io","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"always","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Kafka log manager">
+<meta property="og:type" content="article">
+<meta property="og:title" content="kafka log">
+<meta property="og:url" content="https://thegloves.github.io/2022/10/24/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/kafka/kafka-disk/index.html">
+<meta property="og:site_name" content="Eureka">
+<meta property="og:description" content="Kafka log manager">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-10-24T08:28:04.000Z">
+<meta property="article:modified_time" content="2023-10-06T11:48:35.592Z">
+<meta property="article:author" content="theGloves">
+<meta property="article:tag" content="kafka">
+<meta property="article:tag" content="source">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://thegloves.github.io/2022/10/24/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/kafka/kafka-disk/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>kafka log | Eureka</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Eureka</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">11</span></a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">7</span></a>
+
+  </li>
+        <li class="menu-item menu-item-schedule">
+
+    <a href="/schedule/" rel="section"><i class="fa fa-calendar fa-fw"></i>日程表</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://thegloves.github.io/2022/10/24/%E6%BA%90%E7%A0%81%E9%98%85%E8%AF%BB/kafka/kafka-disk/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="https://avatars.githubusercontent.com/u/20971570?s=400&u=b3d42c25f45664cc98985e0232b36f130c1ca3bb&v=4">
+      <meta itemprop="name" content="theGloves">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Eureka">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          kafka log
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-10-24 16:28:04" itemprop="dateCreated datePublished" datetime="2022-10-24T16:28:04+08:00">2022-10-24</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2023-10-06 19:48:35" itemprop="dateModified" datetime="2023-10-06T19:48:35+08:00">2023-10-06</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/kafka/" itemprop="url" rel="index"><span itemprop="name">kafka</span></a>
+                </span>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>Kafka log manager</p>
+<span id="more"></span>
+<p>梳理顺序：</p>
+<p>大纲：</p>
+<ul>
+<li>以组件为单位，看组件之间的联系、接口，主要想展示数据大概的流动方向</li>
+<li>然后落在logmanager、replicamanager两个视角上
+<ul>
+<li>看replica manager会有哪些动作</li>
+<li>每个组件结合kafka可用性和可靠性？</li>
+<li>每个组件内部看组件结构，有哪些主要的类</li>
+<li>logmanager主要关注和磁盘的交互，看log怎么管理-&gt;segment</li>
+<li>replicamanager主要关注kafka内部怎么管理partition，如何时分段、何时删除、分区状态管理</li>
+</ul>
+</li>
+<li>看看kafka的test，从这里为切入点看看会关注什么内容</li>
+</ul>
+<h2 id="log-manger"><a class="markdownIt-Anchor" href="#log-manger"></a> Log Manger</h2>
+<p>log manager的职责（注释）：</p>
+<blockquote>
+<p>The log manager is responsible for <strong>log creation, retrieval, and cleaning</strong>. All read and write operations are delegated to the <strong>individual log instances</strong>. The log manager maintains logs in one or more directories. New logs are created in the data directory with the <em>fewest logs</em>. No attempt is made to move partitions after the fact or balance based on size or I/O rate. A background thread handles log retention by periodically truncating excess log segments.</p>
+</blockquote>
+<p>TODO：</p>
+<ul>
+<li>梳理log manager内部的类图、各个部分的接口</li>
+<li>log manager怎么维护log信息，有哪些，都有什么用</li>
+</ul>
+<p>log也不会直接去和disk交互，交给segment</p>
+<h3 id="接口"><a class="markdownIt-Anchor" href="#接口"></a> 接口</h3>
+<p>log manager</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">+ startup - 启动后台进程来flush日志和清理日志</span><br><span class="line">+ shutdown - 关闭所有打开的logs</span><br><span class="line">+ truncateTo - 把指定分区的offset设置为指定值，抛弃所有offset后所有的日志；同时需要进行一次checkpoint备份</span><br><span class="line">+ truncateFullyAndStartAt - 把一个分区所有的日志都删除，并将开始的offset设置为指定值</span><br><span class="line">+ checkpointRecoveryPointOffsets - 把当前所有log的恢复点写回磁盘</span><br><span class="line">+ getLog - 获取指定分区的日志结构，（非entry记录）</span><br><span class="line">+ createLog - 创建一个指定topic分区的日志文件，如果存在则返回对应的文件</span><br><span class="line">+ asyncDelete - 异步删除指定分区，只是将其标记为删除</span><br><span class="line">+ cleanupLogs - 删除所有可删除的分区</span><br><span class="line">+ allLogs - 返回所有的分区log</span><br><span class="line">+ logsByTopicPartition - 返回所有的分区log，以tp为key，log为value的键值对</span><br></pre></td></tr></table></figure>
+<p>log</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">+ numberOfSegments</span><br><span class="line">+ close - 关闭一个日志文件，将这个日志下面的所有段文件关闭</span><br><span class="line">+ append - 往一个日志追加一条记录（往活跃的segment写入）。可能会触发创建新的segment</span><br><span class="line">+ read - 读取一批记录，从指定startoffset开始。</span><br><span class="line">+ fetchOffsetsByTimestamp - 获取第一个时间戳大于等于指定时间戳记录的offset</span><br><span class="line">+ convertToOffsetMetadata - 将一个消息的offset转换为关联的offset metadata数据</span><br><span class="line">+ deleteOldSegments - 删除旧的segment</span><br><span class="line">+ roll - 新建一个新的活跃segment</span><br><span class="line">+ flush</span><br></pre></td></tr></table></figure>
+<p>segment</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">+ this(7args) - 创建segment对象，初始化filerecord对象</span><br><span class="line">+ append - 从指定的offset开始，写入一批records，可能会产生一个新的索引记录。这个方法假定调用者已经加锁</span><br><span class="line">+ read - 从一个segment中，读取指定范围的一批records，可能通过大小限制</span><br><span class="line">+ recover - 在指定segment上执行recover，重建索引</span><br><span class="line">+ truncateTo - 丢弃从指定offset之后所有的日志</span><br><span class="line">+ flush</span><br><span class="line">+ close</span><br><span class="line">+ delete</span><br></pre></td></tr></table></figure>
+<p>FileRecords</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">- isSlice</span><br><span class="line">- start</span><br><span class="line">- end</span><br><span class="line">- shallowEntries</span><br><span class="line">- size</span><br><span class="line">- channel</span><br><span class="line">- file</span><br><span class="line">+ File</span><br><span class="line">+ FileChannel</span><br><span class="line">+ readInto - 将一批日志读取到指定的buffer</span><br><span class="line">+ read - 读一批日志</span><br><span class="line">+ append - 将一批日志追加到buffer</span><br><span class="line">+ flush</span><br><span class="line">+ close</span><br><span class="line">+ delete</span><br><span class="line">+ trim</span><br><span class="line">+ truncateTo</span><br><span class="line">+ writeTo</span><br></pre></td></tr></table></figure>
+<p>在kafka，有两种打开文件的方式：RandomAccessFile和FileInputStream，RandomAccessFile的特点：</p>
+<ul>
+<li>可以读取文件内容，也可以向文件输出数据</li>
+<li>支持随机访问，可以跳到文件的任意位置读写。与OutputStream、Writer等输出流不同的是，RandomAccessFile允许自由定义文件记录指针，RandomAccessFile可以不从开始的地方开始输出，因此RandomAccessFile可以向己存在的文件后追加内容。如果程序需要向已存在的文件后追加内容，则应该使用RandomAccessFile。</li>
+<li>只能读写文件，不能读写其他IO节点。</li>
+</ul>
+<p>FileInputStream的特点：</p>
+<ul>
+<li>只读；从文件中读取数据</li>
+<li>以字节为单位进行读取 &gt; FileInputStream is meant for reading streams of raw bytes such as image data</li>
+<li>是否会一次性把文件读取到内存中？</li>
+</ul>
+<h2 id="replica-manager"><a class="markdownIt-Anchor" href="#replica-manager"></a> Replica Manager</h2>
+<p>Replica manager的职责：（有点混乱</p>
+<ul>
+<li>管理分区副本的状态：包括创建一个副本、删除一个副本以及副本状态的变化</li>
+<li>控制日志的写入</li>
+<li>fetch日志</li>
+<li>ISR的维护</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/kafka/" rel="tag"># kafka</a>
+              <a href="/tags/source/" rel="tag"># source</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/07/20/%E5%88%86%E5%B8%83%E5%BC%8F%E7%90%86%E8%AE%BA/tla/" rel="prev" title="tla+">
+      <i class="fa fa-chevron-left"></i> tla+
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2023/05/28/%E5%88%86%E5%B8%83%E5%BC%8F%E7%90%86%E8%AE%BA/consensus/basic-raft-protocol/" rel="next" title="basic raft protocol">
+      basic raft protocol <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#log-manger"><span class="nav-number">1.</span> <span class="nav-text"> Log Manger</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%8E%A5%E5%8F%A3"><span class="nav-number">1.1.</span> <span class="nav-text"> 接口</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#replica-manager"><span class="nav-number">2.</span> <span class="nav-text"> Replica Manager</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="theGloves"
+      src="https://avatars.githubusercontent.com/u/20971570?s=400&u=b3d42c25f45664cc98985e0232b36f130c1ca3bb&v=4">
+  <p class="site-author-name" itemprop="name">theGloves</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+        <span class="site-state-item-count">6</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="mailto:yusfko@hotmail.com" title="E-Mail → mailto:yusfko@hotmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">theGloves</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://mist.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Mist</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
